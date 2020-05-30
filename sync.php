@@ -4,7 +4,7 @@
  * See readme.md for examples and more information.
  */
 
-// Function for ouputting a single line message
+// Function for outputting a single line message
 function br($msg) {
     echo $msg . PHP_EOL;
 } 
@@ -23,7 +23,7 @@ if($config) {
 } 
 else br('Missing config parameter -c.');
 
-// check that all params are valid
+// Check that all params are valid
 if(!$local) {
     br('Local path or file not defined. Check your config file.');
     die();
