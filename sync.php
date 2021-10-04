@@ -19,9 +19,15 @@ if($config) {
     if(require($config_file)) {
         br('Configuration file loaded: ' . $config_file);
     }
-    else br("Can't find configuration file: " . $config_file);
+    else {
+        br("Can't find configuration file: " . $config_file);
+        die();
+    }
 } 
-else br('Missing config parameter -c.');
+else {
+    br('Missing config parameter -c.');
+    die();
+}
 
 // Check that all params are valid
 if(!$local) {
@@ -73,60 +79,76 @@ if($connection = ssh2_connect($host, $port)) {
 
     if(ssh2_auth_password($connection, $username, $password)) {
         br('User authorised.');
-    } else br('SSH authorisation failed.');
-} else br("Can't connect to " . $host . ' using port ' . $port);
+    } else {
+        br('SSH authorisation failed.');
+        die();
+    }
+} else {
+    br("Can't connect to " . $host . ' using port ' . $port);
+    die();
+}
 
 // Safety timer
-br('Settings OK. You have 5 second to cancel (ctrl + c). Starting in...');
-for($i = 0; $i < 5; $i++) {
-    br(5 - $i);
-    sleep(1);
-}
+br('Settings OK. You have 5 second to cancel (ctrl + c).');
+sleep(5);
 
 // Track whole folder
 if($watch_local_folder) {
     br('Keeping remote directory up to date. Refresh rate: ' . $refresh_time . '. Stop with ctrl + c');
 
-    // Get initial file modification times times
+    // Get initial file modification times
     $mod_times = array();
-    $files = array_diff(scandir($local), array('..', '.'));
-    foreach ($files as $file) {
-        if(!is_dir($local . $file)) {
-            $mod_times[$file] = filemtime($local . $file);       
+    $rdi = new RecursiveDirectoryIterator($local);
+    foreach (new RecursiveIteratorIterator($rdi) as $filepath => $item) {
+        if(substr($filepath, -1) !== '.') {
+            $mod_times[$filepath] = array(
+                'modtime' => filemtime($filepath),
+                'remote' => str_replace($local, $remote, $filepath),
+                'tree' => false,
+            );
         }
     }
 
     // Run until user ends the operation
     while(true) {
-        $files = array_diff(scandir($local), array('..', '.'));
-
-        foreach ($files as $file) {
-
-            // Get new mod time
-            $filemtime = filemtime($local . $file);
-
-            // If item is not a directory and mod time has changed
-            if(!is_dir($local . $file) && $filemtime > $mod_times[$file]) {
-                echo date('H:i:s') . ' - Change detected: ' . $local . $file . '. Uploading...';
-                
-                // Upload file
-                $result = ssh2_scp_send($connection, $local . $file, $remote . $file, $permissions);
-                // Update mod time to array
-                $mod_times[$file] = $filemtime;
-
-                if($result) {
-                    br('Done.');
-                }
-                else {
-                    br('Upload failed. Try to run the script again.');
-                    die();
-                }
-            }
-            else {
-                // TODO update subdirectories
+        $rdi = new RecursiveDirectoryIterator($local);
+        foreach (new RecursiveIteratorIterator($rdi) as $filepath => $item) {
+            if(substr($filepath, -1) !== '.' && !array_key_exists($filepath, $mod_times)) {
+                $mod_times[$filepath] = array(
+                    'modtime' => filemtime($filepath),
+                    'remote' => str_replace($local, $remote, $filepath)
+                    'tree' => false,
+                );
             }
 
-        }
+            if(array_key_exists($filepath, $mod_times)) {
+                $filemtime = filemtime($filepath);
+                if($filemtime > $mod_times[$filepath]['modtime']) {
+                    echo date('H:i:s') . ' - Change detected: ' . $filepath . '. Uploading...';
+                    
+                    // create directories
+                    if(!$mod_times[$filepath]['tree']) {
+                        $dir = preg_replace('#[^/]*$#', '', $mod_times[$filepath]['remote']);
+                        $sftp = ssh2_sftp($connection);
+                        ssh2_sftp_mkdir($sftp, $dir, 0777, true);
+                        $mod_times[$filepath]['tree'] = true;
+                    }                    
+
+                    // Upload file
+                    $result = ssh2_scp_send($connection, $filepath, $mod_times[$filepath]['remote'], $permissions);
+                    // Update mod time to array
+                    $mod_times[$filepath]['modtime'] = $filemtime;
+
+                    if($result) {
+                        br('Done.');
+                    }
+                    else {
+                        br('Upload failed. Try to run the script again.');
+                        die();
+                    }
+                }
+            }
+        }        
         sleep($refresh_time);
     }
 }

@@ -11,4 +11,3 @@ $permissions = 0644; // File permissions set after SCP transfer is complete, 064
 $local = '/path/to/local/folder/'; // This could be a single file also. Like: /path/to/local/file.txt
 $remote = '/path/to/remote/folder/'; // This could be a single file also. Like: /path/to/remote/file.txt
 $refresh_time = 5; // Refresh time in seconds
-//TODO $update_subdirectories = false; // Set to true to update subdirectories also
